@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # mjsearch [search word]
 #
-# create: 2021-10-16
 # manontanto
 '''
 Search MacJournal Entries
