@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+# mjsearch [search word]
+#
+# create: 2021-10-16
+# manontanto
+'''
+Search MacJournal Entries
+'''
+import os
+import sys
+import glob
+import re
+import gzip
+import pyperclip
+from chardet import detect
+from striprtf.striprtf import rtf_to_text
+
+topic_regex = re.compile(r'<topic>([^>]+)</topic>(<word_count>\d+</word_count>)?<content type="[^"]+" id="([^"]+)"')
+doc_regex = re.compile(r'.+MacJournal/([^/]+)(\.mjdoc).*')
+id_regex = re.compile(r'/Content/(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})\.')
+
+DocPath = "/Users/me/Library/Application Support/MacJournal/*.mjdoc"
+TopicPath = "/Content/*"
+
+def ReadRtf(f):
+    '''
+    Input : Rtf-File path
+    Output: Text-file LIST
+    '''
+    enc = DetectEnc(f)
+    with open(f, 'r', encoding=enc) as ff:
+        t = ff.read()
+        d = rtf_to_text(t)
+        return d.split('\n')
+
+def DetectEnc(f):
+    with open(f, 'rb') as ff:
+        b = ff.read()
+    return detect(b)['encoding']
+
+def MkIndex(indexFilePath):
+    '''
+    Input: path of index.mjml.gz
+    Output: entry_titleとentry_idのdictionary
+    '''
+    indexLines = gzip.open(indexFilePath, 'rt').read()
+    mo = topic_regex.findall(indexLines)
+    indexDic = {}
+    for topic_title, dum, topic_id in mo:
+        indexDic[ topic_id ] = topic_title
+    return indexDic
+
+def main():
+    if len(sys.argv) == 2:
+        sword = sys.argv[1]
+    else:
+        sword = pyperclip.paste()
+
+    for Doc in glob.glob(DocPath):
+        print(Doc)
+        indexDic = MkIndex(Doc + "/index.mjml.gz")
+        for topic in glob.glob(Doc + TopicPath):
+            if os.path.getsize(topic) == 0:
+                continue
+            ext = os.path.splitext(topic)[1][1:]
+            if ext in ('rtf', 'rtfd'):
+                if ext == 'rtfd':
+                    topic = topic + "/TXT.rtf"
+                lineList = ReadRtf(topic)
+            else:
+                enc = DetectEnc(topic)
+                with open(topic, 'r', encoding=enc) as f:
+                    lineList = f.readlines()
+            for l in lineList:
+                if sword in l:
+                    m = doc_regex.match(topic)
+                    topic_id = id_regex.search(topic).group(1)
+                    title = indexDic[topic_id]
+                    print("《 " + m.group(1) + " 》 [" + title + "]") # document, topic
+                    print(l)
+
+if __name__ == '__main__':
+    main()
