@@ -24,7 +24,7 @@ TopicPath = "/Content/*"
 def ReadRtf(f):
     '''
     Input : Rtf-File path
-    Output: Text-file LIST
+    Output: Text-file lines LIST
     '''
     enc = DetectEnc(f)
     with open(f, 'r', encoding=enc) as ff:
@@ -39,7 +39,7 @@ def DetectEnc(f):
 
 def MkIndex(indexFilePath):
     '''
-    Input: path of index.mjml.gz
+    Input : path of index.mjml.gz
     Output: entry_titleとentry_idのdictionary
     '''
     indexLines = gzip.open(indexFilePath, 'rt').read()
@@ -56,7 +56,6 @@ def main():
         sword = pyperclip.paste()
 
     for Doc in glob.glob(DocPath):
-        print(Doc)
         indexDic = MkIndex(Doc + "/index.mjml.gz")
         for topic in glob.glob(Doc + TopicPath):
             if os.path.getsize(topic) == 0:
