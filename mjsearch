@@ -2,34 +2,48 @@
 # mjsearch [search word]
 #
 # manontanto
-'''
-Search MacJournal Entries
-'''
 import os
 import sys
 import glob
 import re
+import xml.etree.ElementTree as ET
 import gzip
 import pyperclip
 from chardet import detect
 from striprtf.striprtf import rtf_to_text
 
-topic_regex = re.compile(r'<topic>([^>]+)</topic>(<word_count>\d+</word_count>)?<content type="[^"]+" id="([^"]+)"')
+DEBUG = False
+
 doc_regex = re.compile(r'.+MacJournal/([^/]+)(\.mjdoc).*')
 id_regex = re.compile(r'/Content/(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})\.')
 
-DocPath = "/Users/me/Library/Application Support/MacJournal/*.mjdoc"
+DocPath = "/Users/***/Library/Application Support/MacJournal/*.mjdoc"
 TopicPath = "/Content/*"
 
 def ReadRtf(f):
     '''
     Input : Rtf-File path
-    Output: Text-file lines LIST
+    Output: Text-file LIST of lines
     '''
     enc = DetectEnc(f)
+    if enc == 'cp932':
+        enc = 'utf-8'
+    if DEBUG is True:
+        print(f)
     with open(f, 'r', encoding=enc) as ff:
-        t = ff.read()
-        d = rtf_to_text(t)
+        try:
+            t = ff.read()
+        except UnicodeDecodeError: 
+            print("Error on ff.read()")
+            print(f"f: {f}")
+            sys.exit()
+        try:
+            d = rtf_to_text(t, errors='ignore')
+        except Exception as exc:
+            print(f'問題あり: {exc}')
+            print(f"f: {f}")
+            print(f.split('/')[8])
+            sys.exit()
         return d.split('\n')
 
 def DetectEnc(f):
@@ -39,25 +53,29 @@ def DetectEnc(f):
 
 def MkIndex(indexFilePath):
     '''
-    Input : path of index.mjml.gz
+    Input: index.mjml.gz のpath
     Output: entry_titleとentry_idのdictionary
     '''
-    indexLines = gzip.open(indexFilePath, 'rt').read()
-    mo = topic_regex.findall(indexLines)
+    tree = ET.parse(gzip.GzipFile(indexFilePath))
+    root = tree.getroot()
+    parent_map = dict((c, p) for p in tree.iter() for c in p)
     indexDic = {}
-    for topic_title, dum, topic_id in mo:
-        indexDic[ topic_id ] = topic_title
+    for elem in root.iter('entry'):
+        title = elem.find('topic').text
+        id = elem.find('content').attrib['id']
+        parent = parent_map[parent_map[elem]].find('name').text
+        indexDic[id] = {"title": title, "parent":parent}
     return indexDic
 
 def main():
     if len(sys.argv) == 2:
-        sword = sys.argv[1]
+        sword = sys.argv[1].lower()
     else:
-        sword = pyperclip.paste()
+        sword = pyperclip.paste().lower()
 
-    for Doc in glob.glob(DocPath):
-        indexDic = MkIndex(Doc + "/index.mjml.gz")
-        for topic in glob.glob(Doc + TopicPath):
+    for Doc in glob.glob(DocPath):  # 各ジャーナルにつき
+        indexDic = MkIndex(Doc + "/index.mjml.gz")  # topic(title)とidの対応辞書
+        for topic in glob.glob(Doc + TopicPath):  # topicは'topic+拡張子'で、file名
             if os.path.getsize(topic) == 0:
                 continue
             ext = os.path.splitext(topic)[1][1:]
@@ -67,15 +85,32 @@ def main():
                 lineList = ReadRtf(topic)
             else:
                 enc = DetectEnc(topic)
+                if enc == 'Windows-1254':
+                    enc = 'utf-8'
                 with open(topic, 'r', encoding=enc) as f:
-                    lineList = f.readlines()
+                    try:
+                        lineList = f.readlines()
+                    except UnicodeDecodeError:
+                        print(enc, '================')
+                        print(topic)
+                        sys.exit()
+            d = doc_regex.match(Doc).group(1)  # ジャーナル名
+            topic_id = id_regex.search(topic).group(1) # id
+            try:
+                title = indexDic[topic_id]["title"]
+            except KeyError:
+                print(f"Oops! There is no key: {topic_id}")
+                print("topic: " + topic)
+                print("topic_id: " + topic_id)
+                sys.exit()
+            parent = indexDic[topic_id]["parent"]
+            if sword in title.lower():
+                print(f"《 {d}..{parent} 》 [ {title} ]") # document, topic
+                continue
             for l in lineList:
-                if sword in l:
-                    m = doc_regex.match(topic)
-                    topic_id = id_regex.search(topic).group(1)
-                    title = indexDic[topic_id]
-                    print("《 " + m.group(1) + " 》 [" + title + "]") # document, topic
-                    print(l)
+                if sword in l.lower():
+                    print(f"《 {d}..{parent} 》 [ {title} ]") # document, topic
+                    print(l)    # ヒット行
 
 if __name__ == '__main__':
     main()
