@@ -1,7 +1,7 @@
 # mjsearch
 ### Search the Entries of MacJournal text for a Word.
 
-I'm using MacJournal for a long time. Many thanks for you, Dan.
+I'm using MacJournal for a long time. From school days, it's very useful as Book Reference Card. I'm very grateful to Dan.
 
 Of course it has search function originally, but not enough for me. So, I made this python script for my fancy full-text-search.
 
